@@ -15,15 +15,6 @@ def exact_match(test_seq, reference_seqs, length) :
     IS_MATCH = test_seq in reference_seqs
   return(IS_MATCH)
 
-# use pigeonhole principle to test for edit distance one
-def edit_distance_one_match(test_seq, reference_seqs, length) :
-  IS_MATCH = False
-  # check length
-  if len(test_seq) >= length :
-    # first half of sequence
-
-
-                                
 
 
 
@@ -45,29 +36,56 @@ def main():
                       help = "input fastq file name")
   parser.add_argument('-m', '--mismatches', dest = 'n_mismatches',
                       default = 0, type = int, 
-                      help = "number of mismatches to allow")
+                      help = "number of mismatches to allow, maximum of 2")
   parser.add_argument('-V', '--VERBOSE', action = "store_true",
                       dest = 'VERBOSE', default = False,
                       help = "run in verbose mode")
   args = parser.parse_args()
 
+  # ensure n_mismatches <= 2
+  assert (args.n_mismatches < 3)  & (args.n_mismatches >= 0)
+  
+  # strip whitespace from matching sequence
   args.matching_seq = args.matching_seq.replace(' ', '')
+  # testing check
   if args.VERBOSE:
     print("sequence to match = ", args.matching_seq, file = sys.stderr)
 
   # read reference sgRNAs, save them in a hash table
-  sgRNAs_set = set(line.strip() for line in args.ref_sgRNAs.readline())
-  sgRNAs_list = list(sgRNAs_set)
+  sgRNAs_list = list(line.strip() for line in args.ref_sgRNAs.readlines())
+  sgRNAs_set = set(sgRNAs_list)
+  # testing check
+  if args.VERBOSE:
+    print("size of reference sequence set = ", len(sgRNAs_list), file = sys.stderr)
   # length equals length of sgRNA
   length = len(sgRNAs_list[0])
   # make sure all reference sgRNAs are the same length
   for sgRNA in sgRNAs_list :
+    if len(sgRNA) != length :
+      print("sgRNA = ", sgRNA, ", expected length = ", length, ", true length = ", len(sgRNA), file = sys.stderr)
     assert len(sgRNA) == length
-  if args.VERBOSE:
-    print("size of reference sequence set = ", len(sgRNAs_set), file = sys.stderr)
-  
+
+  if args.n_mismatches > 0 :
+    ref_seqs_first_half = []
+    for seq in sgRNAs_list :
+      ref_seqs_first_half.append(seq[0:(length/2)])
+    # second half of sequence
+    ref_seqs_second_half = []
+    for seq in sgRNAs_list :
+      ref_seqs_second_half.append(seq[(length/2):len(seq)])
+    # construct hash tables (dictionary in python) with
+    ref_seqs_halves_dict = defaultdict(list)
+    for ref_seq, sgRNA in zip(ref_seqs_first_half + ref_seqs_second_half, sgRNAs_list + sgRNAs_list) :
+      ref_seqs_halves_dict[ref_seq].append(sgRNA)
+
+    # testing
+    if args.VERBOSE :
+      for key, val in ref_seqs_halves_dict.iteritems() :
+        print(str(key), " ", str(val), file = sys.stderr)
+
+
   args.output_filename.write("obs_sequence\tref_sequence\tmismatches\n")
-                             
+
   # read fastq file, iteratively check for existance in sgRNA_set
   indx = 0
   for line in args.input_filename.readlines() :
@@ -78,33 +96,28 @@ def main():
       if args.VERBOSE :
         print(line, file = sys.stderr)
       seq_search = re.compile(args.matching_seq)
-      seq_match = seq_search.search(line)
+      seq_match = seq_search.finditer(line)
+      print(seq_match, file = sys.stderr)
+      match_locs = [[m.start()] for m in seq_match]
       # match, process preceeding sequence
-      if seq_match:
-        match_loc = seq_match.start()
+      if len(match_locs) > 0:
+        # first match
+        match_loc = match_locs[0]
+        # if match_loc is too small, move to next match
+        if match_loc < length & len(match_locs) > 1:
+          match_loc = match_locs[1]
+        match_loc = match_loc[0]
+        # afraid to go further
+        # testing check
         if args.VERBOSE:
           print("match location found at position ", match_loc, file = sys.stderr)
         # test to see if position is correct to find a match
-        if match_loc >= length + 1
-          test_seq = line[(match_loc - length - 1):(match_loc - 1)]
-          if exact_match(test_seq, reference_seqs, length) :
+        if match_loc >= length :
+          test_seq = line[(match_loc - length):match_loc]
+          print("test_seq = ", test_seq, file = sys.stderr)
+          if exact_match(test_seq, sgRNAs_set, length) :
             args.output_filename.write("%s\t%s\t0\n" % (test_seq, test_seq))
           # test for edit distance 1 away
-          elif args.n_mismatches > 0 :
-            ref_seqs_first_half = []
-            for seq in reference_seqs :
-              ref_seqs_first_half.append(seq[1:floor(length/2)])
-            # second half of sequence
-            ref_seqs_second_half = []
-            for seq in reference_seqs :
-              ref_seqs_second_half.append(seq[ceil(length/2):len(seq)])
-            # construct hash tables (dictionary in python) with
-            ref_seqs_halves_dict = defaultdict(zip(ref_seqs_first_half + ref_seqs_second_half,
-                                                   reference_seqs + reference_seqs))
-            # testing
-            if args.VERBOSE :
-              for key, val in ref_seqs_halves_dict.iteritems() :
-                print(str(key), " ", str(val), file = sys.stderr)
   
       # no match
       else:
