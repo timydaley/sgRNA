@@ -4,6 +4,8 @@ import sys
 import re
 import math
 from collections import defaultdict
+# why write edit distance function when I can import it?
+import Levenshtein
 
 
 # concatenate test_seq first
@@ -66,6 +68,8 @@ def main():
     assert len(sgRNA) == length
 
   if args.n_mismatches > 0 :
+    # constuct a hash table containing the two halfs of the reference sgRNAs
+    # reduces the number of comparisons
     ref_seqs_first_half = []
     for seq in sgRNAs_list :
       ref_seqs_first_half.append(seq[0:(length/2)])
@@ -79,9 +83,9 @@ def main():
       ref_seqs_halves_dict[ref_seq].append(sgRNA)
 
     # testing
-    if args.VERBOSE :
-      for key, val in ref_seqs_halves_dict.iteritems() :
-        print(str(key), " ", str(val), file = sys.stderr)
+    #if args.VERBOSE :
+    #  for key, val in ref_seqs_halves_dict.iteritems() :
+    #    print(str(key), " ", str(val), file = sys.stderr)
 
 
   args.output_filename.write("obs_sequence\tref_sequence\tmismatches\n")
@@ -118,6 +122,15 @@ def main():
           if exact_match(test_seq, sgRNAs_set, length) :
             args.output_filename.write("%s\t%s\t0\n" % (test_seq, test_seq))
           # test for edit distance 1 away
+          elif args.n_mismatches > 0 :
+            first_half = test_seq[0:(length/2)]
+            second_half = test_seq[(length/2):len(seq)]
+            matches = ref_seqs_halves_dict[first_half] + ref_seqs_halves_dict[second_half]
+            print(matches, file = sys.stderr)
+            for i in matches :
+              d = Levenshtein.distance(i, test_seq)
+              if d <= 1 :
+                args.output_filename.write("%s\t%s\t%s\n" % (test_seq, i, d))
   
       # no match
       else:
