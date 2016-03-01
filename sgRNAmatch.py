@@ -118,7 +118,6 @@ def main():
         # test to see if position is correct to find a match
         if match_loc >= length :
           test_seq = line[(match_loc - length):match_loc]
-          print("test_seq = ", test_seq, file = sys.stderr)
           if exact_match(test_seq, sgRNAs_set, length) :
             args.output_filename.write("%s\t%s\t0\n" % (test_seq, test_seq))
           # test for edit distance 1 away
@@ -126,7 +125,6 @@ def main():
             first_half = test_seq[0:(length/2)]
             second_half = test_seq[(length/2):len(seq)]
             matches = ref_seqs_halves_dict[first_half] + ref_seqs_halves_dict[second_half]
-            print(matches, file = sys.stderr)
             for i in matches :
               d = Levenshtein.distance(i, test_seq)
               if d <= 1 :
