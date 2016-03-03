@@ -113,6 +113,8 @@ def main():
     print("size of reference sequence set = ", len(sgRNAs_list), file = sys.stderr)
   # length equals length of sgRNA
   length = len(sgRNAs_list[0])
+  if args.VERBOSE :
+    print("length of sgRNAs = ", length, file = sys.stderr)
   # make sure all reference sgRNAs are the same length
   for sgRNA in sgRNAs_list :
     if len(sgRNA) != length :
@@ -158,7 +160,6 @@ def main():
       fastq_rec.qual = line
       # got the whole line, now do stuff
       fastq_rec = fastq_trim_sgRNA(fastq_rec, args.matching_seq, length, args.VERBOSE)
-      fastq_rec.write(args.output_filename)
       if exact_match(fastq_rec.seq, sgRNAs_set, length) :
         fastq_rec.write(args.output_filename)
         fastq_rec.clear()
