@@ -8,6 +8,35 @@ from collections import defaultdict
 import Levenshtein
 
 
+class fastq_record :
+  # fastq record is 4 lines: ID, sequence, plus (3rd line), and quality score
+  def __init__(self, ID, seq, plus, qual) :
+    self.ID = ID
+    self.seq = seq
+    self.plus = plus
+    self.qual = qual
+
+  def __init__(self):
+    self.ID = None
+    self.seq = None
+    self.plus = None
+    self.qual = None
+
+  def write(self, output_filename) :
+    output_filename.write("%s\n" % (self.ID))
+    output_filename.write("%s\n" % (self.seq))
+    output_filename.write("%s\n" % (self.plus))
+    output_filename.write("%s\n" % (self.qual))
+
+  def clear(self) :
+    self.ID = None
+    self.seq = None
+    self.plus = None
+    self.qual = None
+
+
+
+
 # concatenate test_seq first
 def exact_match(test_seq, reference_seqs, length) :
   IS_MATCH = False
@@ -17,6 +46,29 @@ def exact_match(test_seq, reference_seqs, length) :
     IS_MATCH = test_seq in reference_seqs
   return(IS_MATCH)
 
+# find matching sequence in sequence line and truncate
+# to get
+def fastq_trim_sgRNA(fastq_rec, matching_seq, length, VERBOSE) :
+  seq_search = re.compile(matching_seq)
+  seq_match = seq_search.finditer(fastq_rec.seq)
+  match_locs = [[m.start()] for m in seq_match]
+  # match, process preceeding sequence
+  if len(match_locs) > 0:
+    # first match
+    match_loc = match_locs[0]
+    # if match_loc is too small, move to next match
+    if match_loc < length & len(match_locs) > 1:
+      match_loc = match_locs[1]
+    match_loc = match_loc[0]
+    # afraid to go further
+    # testing check
+    if VERBOSE:
+      print("match location found at position ", match_loc, file = sys.stderr)
+    # test to see if position is correct to find a match
+    if match_loc >= length :
+      fastq_rec.seq = fastq_rec.seq[(match_loc - length):match_loc]
+      fastq_rec.qual = fastq_rec.qual[(match_loc - length):match_loc]
+  return(fastq_rec)
 
 
 
@@ -82,57 +134,43 @@ def main():
     for ref_seq, sgRNA in zip(ref_seqs_first_half + ref_seqs_second_half, sgRNAs_list + sgRNAs_list) :
       ref_seqs_halves_dict[ref_seq].append(sgRNA)
 
-  if args.n_mismatches == 2 :
+  #if args.n_mismatches == 2 :
   # construct a hash table of three thirds of the reference sgRNAs
-
     # testing
     #if args.VERBOSE :
     #  for key, val in ref_seqs_halves_dict.iteritems() :
     #    print(str(key), " ", str(val), file = sys.stderr)
 
 
-  args.output_filename.write("obs_sequence\tref_sequence\tmismatches\n")
-
   # read fastq file, iteratively check for existance in sgRNA_set
   indx = 0
+  fastq_rec = fastq_record()
   for line in args.input_filename.readlines() :
     line = line.rstrip('\n')
     indx += 1
-    # 2nd of overy 4 line is the sequence in a fastq file
+    if indx % 4 == 1 :
+      fastq_rec.ID = line
     if indx % 4 == 2 :
-      if args.VERBOSE :
-        print(line, file = sys.stderr)
-      seq_search = re.compile(args.matching_seq)
-      seq_match = seq_search.finditer(line)
-      match_locs = [[m.start()] for m in seq_match]
-      # match, process preceeding sequence
-      if len(match_locs) > 0:
-        # first match
-        match_loc = match_locs[0]
-        # if match_loc is too small, move to next match
-        if match_loc < length & len(match_locs) > 1:
-          match_loc = match_locs[1]
-        match_loc = match_loc[0]
-        # afraid to go further
-        # testing check
-        if args.VERBOSE:
-          print("match location found at position ", match_loc, file = sys.stderr)
-        # test to see if position is correct to find a match
-        if match_loc >= length :
-          test_seq = line[(match_loc - length):match_loc]
-          if exact_match(test_seq, sgRNAs_set, length) :
-            args.output_filename.write("%s\t%s\t0\n" % (test_seq, test_seq))
-          # test for edit distance 1 away
-          elif args.n_mismatches > 0 :
-            first_half = test_seq[0:(length/2)]
-            second_half = test_seq[(length/2):len(seq)]
-            matches = ref_seqs_halves_dict[first_half] + ref_seqs_halves_dict[second_half]
-            for i in matches :
-              d = Levenshtein.distance(i, test_seq)
-              if d <= 1 :
-                args.output_filename.write("%s\t%s\t%s\n" % (test_seq, i, d))
-  
-      # no match
+      fastq_rec.seq = line
+    if indx % 4 == 3 :
+      fastq_rec.plus = line
+    if indx % 4 == 0 :
+      fastq_rec.qual = line
+      # got the whole line, now do stuff
+      fastq_rec = fastq_trim_sgRNA(fastq_rec, args.matching_seq, length, args.VERBOSE)
+      fastq_rec.write(args.output_filename)
+      if exact_match(fastq_rec.seq, sgRNAs_set, length) :
+        fastq_rec.write(args.output_filename)
+        fastq_rec.clear()
+          #elif args.n_mismatches > 0 :
+          #  first_half = test_seq[0:(length/2)]
+          #  second_half = test_seq[(length/2):len(seq)]
+          #  matches = ref_seqs_halves_dict[first_half] + ref_seqs_halves_dict[second_half]
+          #  for i in matches :
+          #    d = Levenshtein.distance(i, test_seq)
+          #    if d <= 1 :
+          #      args.output_filename.write("%s\t%s\t%s\n" % (test_seq, i, d))
+        # no match
       else:
         if args.VERBOSE :
           print("No match", file = sys.stderr)
